@@ -3,20 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hechizos de Voz Directo</title>
+    <title>Hechizos de Voz - Inicio Directo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #0a0a15; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; padding: 15px; z-index: 10; pointer-events: none; box-sizing: border-box; }
         .stats h2, .stats h3 { margin: 5px 0; font-size: 1.1rem; text-shadow: 2px 2px 4px #000; }
-        #lastWordLabel { color: #f0f; font-weight: bold; font-size: 1rem; margin-top: 10px; background: rgba(0,0,0,0.6); display: inline-block; padding: 5px 12px; border-radius: 10px; border: 1px solid #f0f5; }
-        
-        #btnControl { 
-            position: absolute; top: 15px; right: 15px; pointer-events: auto; 
-            padding: 12px 20px; background: #0cf; color: #000; border: none; 
-            border-radius: 50px; font-weight: bold; font-size: 1rem;
-            box-shadow: 0 0 15px rgba(0,204,255,0.5);
-        }
+        #lastWordLabel { color: #0cf; font-weight: bold; font-size: 1.2rem; margin-top: 10px; background: rgba(0,0,0,0.6); display: inline-block; padding: 5px 15px; border-radius: 10px; border: 1px solid #0cf3; }
     </style>
 </head>
 <body>
@@ -26,48 +19,41 @@
             <h2 id="scoreLabel">Puntos: 0</h2>
             <h3 id="levelLabel">Nivel: 1</h3>
             <h3 id="timerLabel">Tiempo: 30s</h3>
-            <div id="lastWordLabel">Toca el botón azul para empezar</div>
+            <div id="lastWordLabel">Escuchando hechizos...</div>
         </div>
-        <button id="btnControl" onclick="toggleGame()">INICIAR</button>
     </div>
 
 <script>
 let elements = [];
 let particles = [];
 let score = 0, level = 1, timeLeft = 30;
-let isPaused = true, lastSecond = 0;
+let lastSecond = 0;
 let recognition;
-let started = false;
 
-// --- RECONOCIMIENTO DE VOZ (Estilo Neblina) ---
+// --- RECONOCIMIENTO DE VOZ (Igual al de la neblina) ---
 function initSpeech() {
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Speech) return alert("Voz no soportada");
+    if (!Speech) return;
 
     recognition = new Speech();
     recognition.lang = 'es-ES';
     recognition.continuous = true;
+    recognition.interimResults = false;
+
     recognition.onresult = (e) => {
         const result = e.results[e.results.length - 1][0].transcript.toLowerCase();
-        document.getElementById('lastWordLabel').innerText = "Hechizo: " + result;
+        document.getElementById('lastWordLabel').innerText = "Dijiste: " + result;
         checkSpell(result);
     };
-    recognition.onend = () => { if(!isPaused) recognition.start(); };
-    recognition.start();
-}
 
-function toggleGame() {
-    if (!started) {
-        // Primera vez: Activar todo
-        userStartAudio(); // Despertar p5 audio
-        initSpeech();
-        isPaused = false;
-        started = true;
-        lastSecond = millis();
-        document.getElementById('btnControl').innerText = "REINICIAR";
-        document.getElementById('btnControl').style.background = "#333";
-        document.getElementById('btnControl').style.color = "#0cf";
-        document.getElementById('btnControl').onclick = () => location.reload();
+    recognition.onend = () => { 
+        try { recognition.start(); } catch(e) {} 
+    };
+
+    try {
+        recognition.start();
+    } catch(e) {
+        console.log("Error al iniciar reconocimiento automático");
     }
 }
 
@@ -91,22 +77,20 @@ function checkSpell(word) {
     }
 }
 
-// --- P5.JS ---
+// --- P5.JS MOTOR ---
 function setup() {
     createCanvas(windowWidth, windowHeight);
+    lastSecond = millis();
     spawnElements();
+    
+    // Iniciar voz automáticamente igual que en el código de la neblina
+    initSpeech();
 }
 
 function draw() {
     background(10, 10, 25);
-    if (isPaused) {
-        fill(255, 100);
-        textAlign(CENTER);
-        textSize(16);
-        text("DI: HIELO, FUEGO o RAYO", width/2, height/2);
-        return;
-    }
 
+    // Lógica de tiempo
     if (millis() - lastSecond > 1000) {
         timeLeft--;
         lastSecond = millis();
@@ -117,10 +101,12 @@ function draw() {
         }
     }
 
+    // Dibujar y mover elementos
     for (let e of elements) {
         e.x += e.vx; e.y += e.vy;
         if (e.x < 30 || e.x > width - 30) e.vx *= -1;
         if (e.y < 30 || e.y > height - 30) e.vy *= -1;
+        
         fill(e.col);
         push();
         translate(e.x, e.y);
@@ -131,11 +117,13 @@ function draw() {
         pop();
     }
 
+    // Partículas de explosión
     for (let i = particles.length - 1; i >= 0; i--) {
         particles[i].update();
         particles[i].show();
         if (particles[i].done()) particles.splice(i, 1);
     }
+
     updateUI();
 }
 
@@ -146,7 +134,7 @@ function spawnElements() {
         let col = type === 'cuadrado' ? color(0, 204, 255) : (type === 'circulo' ? color(255, 51, 51) : color(255, 255, 0));
         elements.push({
             x: random(50, width-50), y: random(50, height-50),
-            vx: random(-1.5, 1.5), vy: random(-1.5, 1.5),
+            vx: random(-1.2, 1.2), vy: random(-1.2, 1.2),
             type: type, col: col
         });
     }
@@ -166,7 +154,8 @@ class Particle {
     constructor(x, y, col) {
         this.pos = createVector(x, y);
         this.v = p5.Vector.random2D().mult(random(2, 5));
-        this.a = 255; this.c = col;
+        this.a = 255; 
+        this.c = col;
     }
     update() { this.pos.add(this.v); this.a -= 10; }
     done() { return this.a <= 0; }
@@ -174,6 +163,13 @@ class Particle {
 }
 
 function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+
+// Despertar audio en el primer toque de pantalla por si Chrome lo bloquea
+function touchStarted() {
+    if (getAudioContext().state !== 'running') {
+        getAudioContext().resume();
+    }
+}
 </script>
 </body>
 </html>
