@@ -3,25 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hechizos de Voz - Fix Mobile</title>
+    <title>Hechizos de Voz Directo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #0a0a15; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; padding: 15px; z-index: 10; pointer-events: none; box-sizing: border-box; }
-        .stats h2, .stats h3 { margin: 5px 0; font-size: 1.2rem; text-shadow: 2px 2px 4px #000; }
-        #lastWordLabel { color: #f0f; font-weight: bold; font-size: 1rem; margin-top: 10px; background: rgba(0,0,0,0.4); display: inline-block; padding: 2px 10px; border-radius: 10px; }
-        #btnReglas { position: absolute; top: 15px; right: 15px; pointer-events: auto; padding: 8px 15px; background: #1a1a2e; color: #0cf; border: 1px solid #0cf; border-radius: 5px; font-weight: bold; }
-
-        #overlay { display: flex; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: #0a0a15; justify-content: center; align-items: center; text-align: center; }
-        .card { background: #1a1a2e; padding: 25px; border-radius: 20px; border: 2px solid #0cf; width: 85%; max-width: 400px; pointer-events: auto; }
-        .keyword { padding: 2px 5px; border-radius: 4px; font-weight: bold; }
+        .stats h2, .stats h3 { margin: 5px 0; font-size: 1.1rem; text-shadow: 2px 2px 4px #000; }
+        #lastWordLabel { color: #f0f; font-weight: bold; font-size: 1rem; margin-top: 10px; background: rgba(0,0,0,0.6); display: inline-block; padding: 5px 12px; border-radius: 10px; border: 1px solid #f0f5; }
         
-        button#startBtn { 
-            padding: 15px 30px; cursor: pointer; background: #0cf; color: #000; 
-            border: none; border-radius: 50px; font-weight: bold; font-size: 1.2em;
-            box-shadow: 0 5px 15px rgba(0,204,255,0.4); margin-top: 20px;
+        #btnControl { 
+            position: absolute; top: 15px; right: 15px; pointer-events: auto; 
+            padding: 12px 20px; background: #0cf; color: #000; border: none; 
+            border-radius: 50px; font-weight: bold; font-size: 1rem;
+            box-shadow: 0 0 15px rgba(0,204,255,0.5);
         }
-        button:disabled { background: #444; color: #888; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -31,23 +26,9 @@
             <h2 id="scoreLabel">Puntos: 0</h2>
             <h3 id="levelLabel">Nivel: 1</h3>
             <h3 id="timerLabel">Tiempo: 30s</h3>
-            <div id="lastWordLabel">Esperando hechizo...</div>
+            <div id="lastWordLabel">Toca el botón azul para empezar</div>
         </div>
-        <button id="btnReglas" onclick="location.reload()">REINICIAR</button>
-    </div>
-
-    <div id="overlay">
-        <div class="card">
-            <h2 style="color: #0cf">SPELLS ACADEMY</h2>
-            <p>Destruye los objetos con tu voz:</p>
-            <div style="text-align: left; display: inline-block; line-height: 2;">
-                <li>🟦 Di <b>"HIELO"</b> (Cuadrado)</li>
-                <li>🔴 Di <b>"FUEGO"</b> (Círculo)</li>
-                <li>🟡 Di <b>"RAYO"</b> (Triángulo)</li>
-            </div>
-            <p style="font-size: 0.8em; color: #888; margin-top: 15px;">Usa Chrome y acepta el micrófono.</p>
-            <button id="startBtn">INICIAR JUEGO</button>
-        </div>
+        <button id="btnControl" onclick="toggleGame()">INICIAR</button>
     </div>
 
 <script>
@@ -56,69 +37,41 @@ let particles = [];
 let score = 0, level = 1, timeLeft = 30;
 let isPaused = true, lastSecond = 0;
 let recognition;
+let started = false;
 
-// --- LÓGICA DE INICIO REFORZADA ---
-async function startFullExperience() {
-    const btn = document.getElementById('startBtn');
-    btn.disabled = true;
-    btn.innerText = "CONECTANDO...";
-
-    try {
-        // 1. Activar Audio Context de p5.js
-        if (typeof userStartAudio === 'function') {
-            await userStartAudio();
-        }
-
-        // 2. Pedir permiso de micrófono explícitamente
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop()); // Cerramos el test de micro
-
-        // 3. Inicializar reconocimiento de voz
-        initSpeechRecognition();
-
-        // 4. Iniciar el bucle de juego y quitar overlay
-        document.getElementById('overlay').style.display = 'none';
-        isPaused = false;
-        lastSecond = millis();
-        console.log("Juego Iniciado correctamente");
-
-    } catch (err) {
-        console.error(err);
-        alert("Error: No se pudo acceder al micrófono. Asegúrate de estar en HTTPS y dar permisos.");
-        btn.disabled = false;
-        btn.innerText = "REINTENTAR";
-    }
-}
-
-function initSpeechRecognition() {
+// --- RECONOCIMIENTO DE VOZ (Estilo Neblina) ---
+function initSpeech() {
     const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Speech) {
-        alert("Este navegador no soporta Reconocimiento de Voz.");
-        return;
-    }
+    if (!Speech) return alert("Voz no soportada");
 
     recognition = new Speech();
     recognition.lang = 'es-ES';
     recognition.continuous = true;
-    recognition.interimResults = false;
-
-    recognition.onresult = (event) => {
-        if (isPaused) return;
-        const result = event.results[event.results.length - 1][0].transcript.toLowerCase();
+    recognition.onresult = (e) => {
+        const result = e.results[e.results.length - 1][0].transcript.toLowerCase();
+        document.getElementById('lastWordLabel').innerText = "Hechizo: " + result;
         checkSpell(result);
     };
-
-    recognition.onend = () => {
-        if (!isPaused) {
-            try { recognition.start(); } catch (e) {}
-        }
-    };
-
+    recognition.onend = () => { if(!isPaused) recognition.start(); };
     recognition.start();
 }
 
+function toggleGame() {
+    if (!started) {
+        // Primera vez: Activar todo
+        userStartAudio(); // Despertar p5 audio
+        initSpeech();
+        isPaused = false;
+        started = true;
+        lastSecond = millis();
+        document.getElementById('btnControl').innerText = "REINICIAR";
+        document.getElementById('btnControl').style.background = "#333";
+        document.getElementById('btnControl').style.color = "#0cf";
+        document.getElementById('btnControl').onclick = () => location.reload();
+    }
+}
+
 function checkSpell(word) {
-    document.getElementById('lastWordLabel').innerText = "Dijiste: " + word;
     let target = "";
     if (word.includes("hielo")) target = "cuadrado";
     if (word.includes("fuego")) target = "circulo";
@@ -134,7 +87,7 @@ function checkSpell(word) {
                 hit = true;
             }
         }
-        if (hit && elements.length < 2) spawnElements();
+        if (hit && elements.length < 3) spawnElements();
     }
 }
 
@@ -145,20 +98,29 @@ function setup() {
 }
 
 function draw() {
-    if (isPaused) return;
     background(10, 10, 25);
+    if (isPaused) {
+        fill(255, 100);
+        textAlign(CENTER);
+        textSize(16);
+        text("DI: HIELO, FUEGO o RAYO", width/2, height/2);
+        return;
+    }
 
     if (millis() - lastSecond > 1000) {
         timeLeft--;
         lastSecond = millis();
-        if (timeLeft <= 0) nextLevel();
+        if (timeLeft <= 0) {
+            level++;
+            timeLeft = 30;
+            spawnElements();
+        }
     }
 
     for (let e of elements) {
         e.x += e.vx; e.y += e.vy;
         if (e.x < 30 || e.x > width - 30) e.vx *= -1;
         if (e.y < 30 || e.y > height - 30) e.vy *= -1;
-        
         fill(e.col);
         push();
         translate(e.x, e.y);
@@ -180,7 +142,7 @@ function draw() {
 function spawnElements() {
     let count = 2 + level;
     for (let i = 0; i < count; i++) {
-        let type = random(['cuadrado', 'circulo', 'triangulo']);
+        let type = ["cuadrado", "circulo", "triangulo"][Math.floor(Math.random()*3)];
         let col = type === 'cuadrado' ? color(0, 204, 255) : (type === 'circulo' ? color(255, 51, 51) : color(255, 255, 0));
         elements.push({
             x: random(50, width-50), y: random(50, height-50),
@@ -190,19 +152,11 @@ function spawnElements() {
     }
 }
 
-function nextLevel() {
-    level++;
-    timeLeft = 30;
-    spawnElements();
-}
-
 function updateUI() {
     document.getElementById('scoreLabel').innerText = `Puntos: ${score}`;
     document.getElementById('levelLabel').innerText = `Nivel: ${level}`;
     document.getElementById('timerLabel').innerText = `Tiempo: ${timeLeft}s`;
 }
-
-document.getElementById('startBtn').onclick = startFullExperience;
 
 function explode(x, y, col) {
     for (let i = 0; i < 10; i++) particles.push(new Particle(x, y, col));
